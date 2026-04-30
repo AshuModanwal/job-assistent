@@ -1,71 +1,141 @@
-🚀 Building an AI-Powered Job Intelligence Assistant
+# 🚀 AI-Powered Job Intelligence Assistant
+
+> Transforming unstructured job emails into **actionable intelligence using AI + RAG**
+
+---
+
+## 🧩 Problem
 
 Like many developers, I applied to multiple companies across platforms — LinkedIn, Indeed, company portals…
 
 But the real problem wasn’t applying.
 
-👉 It was **losing visibility** after applying
-👉 Not knowing where I applied
-👉 Not understanding why I’m not getting responses
+- ❌ Losing visibility after applying
+- ❌ Not knowing where I applied
+- ❌ Not understanding why I’m not getting responses
 
-Everything was already in my Gmail… just unstructured.
-
-So I started building this 👇
+👉 The data already exists — buried inside **Gmail**, but completely unstructured.
 
 ---
 
-### 🧠 What I’m building
+## 💡 Solution
 
-An **AI-powered system that transforms raw email data into structured job intelligence**
+This project builds an **AI-powered system** that:
 
----
-
-📌 **Here’s how the system looks (current MVP)**
-👇
-![img.png](img.png)
-
----
-
-### ⚙️ Current System (MVP)
-
-* 🔐 Google OAuth 2.0 authentication
-* 📩 Gmail API integration (email ingestion)
-* 🧠 Parsing engine (extract company, role, source, date)
-* 🗄️ PostgreSQL for structured storage
-* 🔄 Sync-based architecture (idempotent, no duplicates)
-
-👉 Pipeline:
-**Gmail → Parsing → Filtering → Structured DB → Dashboard**
+- 📩 Extracts job-related data from emails
+- 🧠 Converts unstructured content → structured intelligence
+- 🗄️ Stores it in a queryable system
+- 🤖 Uses **RAG (Retrieval-Augmented Generation)** to generate insights
 
 ---
 
-### 🧠 AI Layer (What I’m building next)
+## 📊 Dashboard (Current MVP)
 
-This is where things get interesting 👇
+![Dashboard](./Data/DashBoard.png)
 
-📌 **System architecture & roadmap**
-👇
-![img_1.png](img_1.png)
+A centralized dashboard to track:
 
----
-
-I’m currently working on:
-
-* 🧩 **Document Chunking (JD + Resume + Emails)**
-* 🔗 **Embedding generation**
-* 🗃️ **Vector storage (FAISS / PGVector)**
-* 🔍 **Top-K semantic retrieval**
-* 🤖 **LLM-based reasoning layer**
-
-👉 Building towards a **RAG-based system** that can answer:
-
-* “Why am I not getting callbacks?”
-* “Which skills am I missing across applications?”
-* “Prepare me for this role based on my history + JD”
+- Applications
+- Status (Applied / Rejected / Interview)
+- Companies & Roles
+- Timeline insights
 
 ---
 
-### 💡 Vision
+## ⚙️ Current System (MVP)
+
+### 🔧 Features
+
+- 🔐 Google OAuth 2.0 authentication
+- 📩 Gmail API integration (email ingestion)
+- 🧠 Parsing engine (extract company, role, source, date)
+- 🗄️ PostgreSQL for structured storage
+- 🔄 Sync-based architecture (idempotent, no duplicates)
+
+---
+
+### 🔄 Pipeline
+
+
+---
+
+## 🧠 AI Layer (In Progress)
+
+![AI Working](./Data/AI_Working_Mechanism.png)
+
+This is where the system evolves from **tracking → intelligence**
+
+---
+
+### 🧩 Core AI Components
+
+#### 1. Document Processing
+- Emails (application confirmations, rejections, updates)
+- Job Descriptions (JD)
+- Resume
+
+#### 2. Chunking Strategy
+- Splitting large documents into smaller chunks
+- Maintaining semantic continuity
+
+#### 3. Embedding Generation
+- Convert text → vector representations
+- Captures semantic meaning beyond keywords
+
+#### 4. Vector Database
+- FAISS / PGVector
+- Efficient similarity search
+
+#### 5. Retrieval (Top-K)
+- Fetch most relevant chunks for a query
+
+#### 6. LLM Reasoning Layer
+- Combines retrieved context
+- Generates intelligent, contextual answers
+
+---
+
+## 🔍 RAG Pipeline (Core Idea)
+
+
+---
+
+## 🤖 What This System Enables
+
+Instead of just tracking applications, this system can answer:
+
+- ❓ Why am I not getting callbacks?
+- 📉 Which skills are missing across applications?
+- 🎯 Which roles am I best suited for?
+- 🧠 How can I improve my resume for a specific job?
+
+---
+
+## 🧱 Full System Architecture
+
+![Architecture](./Data/System_Architecture.png)
+
+---
+
+## 🧪 Tech Stack
+
+### Backend
+- Java + Spring Boot
+- REST APIs
+- Gmail API
+
+### Data Layer
+- PostgreSQL
+- (Upcoming) PGVector
+
+### AI Layer (Upcoming)
+- Embeddings (OpenAI / Local LLMs)
+- FAISS / Vector DB
+- RAG Pipeline
+
+---
+
+## 🔥 Vision
 
 Move from:
 
@@ -73,28 +143,34 @@ Move from:
 
 To:
 
-🔥 **AI-driven decision system for job search**
+🚀 **AI-driven job decision system**
 
 ---
 
-### 🧱 Tech Stack
+## 📌 Future Enhancements
 
-* Java + Spring Boot
-* Gmail API
-* PostgreSQL
-* (Upcoming) LLM + Embeddings + Vector DB
-
----
-
-### 📂 Full Architecture 
-
-![img_2.png](img_2.png)
-
-This is something I wish I had during my own job search.
-
-Still early — but already solving a real problem.
-
-Would love feedback or ideas 🙌
+- 📊 AI-powered job match scoring
+- 🧠 Resume vs JD gap analysis
+- 📬 Smart follow-up recommendations
+- ⚡ Event-driven architecture (Kafka)
+- 🏗️ Scalable microservices architecture
 
 ---
 
+## 🙌 Why This Project Matters
+
+This is not just a CRUD project.
+
+It combines:
+
+- Backend Engineering
+- AI System Design
+- Distributed Thinking
+- Real-world Problem Solving
+
+---
+
+## ⭐ Final Thought
+
+> Your job search already has data.  
+> This system turns it into intelligence.
