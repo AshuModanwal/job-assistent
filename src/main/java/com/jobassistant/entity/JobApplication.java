@@ -32,5 +32,5 @@ public class JobApplication {
     private String feedback;
 
     @ManyToOne
-    private User user;
+    private Users user;
 }

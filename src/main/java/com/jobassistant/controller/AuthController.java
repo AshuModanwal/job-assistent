@@ -1,5 +1,7 @@
 package com.jobassistant.controller;
 
+import com.jobassistant.entity.Users;
+import com.jobassistant.repository.UserRepository;
 import com.jobassistant.service.GmailService;
 import com.jobassistant.util.HelperMethods;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,9 +21,24 @@ public class AuthController {
     @Autowired
     private HelperMethods helperMethods;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @GetMapping("/user")
-    public Object getUser(@AuthenticationPrincipal OAuth2User user) {
-        return user.getAttributes();
+    public Users getUser(@AuthenticationPrincipal OAuth2User oAuth2User) {
+
+        String email = oAuth2User.getAttribute("email");
+        String googleId = oAuth2User.getAttribute("sub");
+
+        Users user = userRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    Users newUser = new Users();
+                    newUser.setEmail(email);
+                    newUser.setGoogleId(googleId);
+                    return userRepository.save(newUser);
+                });
+
+        return user;
     }
 
 

@@ -1,18 +1,14 @@
 package com.jobassistant.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 @Entity
-@Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+@Data
+public class Users {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,8 +17,4 @@ public class User {
     private String email;
 
     private String googleId;
-
-    private String accessToken;
-
-    private String refreshToken;
 }
