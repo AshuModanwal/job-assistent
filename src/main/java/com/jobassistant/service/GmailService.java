@@ -1,64 +1,61 @@
 package com.jobassistant.service;
 
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import org.springframework.web.client.RestTemplate;
 
 @Service
+@RequiredArgsConstructor
 public class GmailService {
 
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    private static final String BASE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
+
+    // ✅ Fetch list of emails
     public String fetchEmails(String accessToken) {
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
         try {
-            URL url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            ResponseEntity<String> response = restTemplate.exchange(
+                    BASE_URL,
+                    HttpMethod.GET,
+                    entity,
+                    String.class
+            );
 
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            String inputLine;
-            StringBuilder response = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
-            }
-
-            in.close();
-
-            return response.toString();
+            return response.getBody();
 
         } catch (Exception e) {
-            e.printStackTrace();
-            return "Error fetching emails";
+            throw new RuntimeException("Failed to fetch emails", e);
         }
     }
 
+    // ✅ Fetch single email details
     public String getEmailDetails(String accessToken, String messageId) {
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
         try {
-            URL url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + messageId);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            ResponseEntity<String> response = restTemplate.exchange(
+                    BASE_URL + "/" + messageId,
+                    HttpMethod.GET,
+                    entity,
+                    String.class
+            );
 
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            String inputLine;
-            StringBuilder response = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
-            }
-
-            in.close();
-
-            return response.toString();
+            return response.getBody();
 
         } catch (Exception e) {
-            e.printStackTrace();
-            return "Error fetching email details";
+            throw new RuntimeException("Failed to fetch email details", e);
         }
     }
 }

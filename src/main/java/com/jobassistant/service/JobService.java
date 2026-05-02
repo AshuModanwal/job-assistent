@@ -6,31 +6,25 @@ import com.jobassistant.entity.JobApplication;
 import com.jobassistant.entity.Users;
 import com.jobassistant.repository.JobApplicationRepository;
 import com.jobassistant.util.HelperMethods;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
+@RequiredArgsConstructor
 public class JobService {
 
-    @Autowired
-    private GmailService gmailService;
+    private final GmailService gmailService;
+    private final HelperMethods helper;
+    private final JobApplicationRepository jobRepo;
 
-    @Autowired
-    private HelperMethods helper;
-
-    @Autowired
-    private JobApplicationRepository jobRepo;
-
+    // ✅ SYNC JOBS FROM GMAIL
     public List<JobApplication> syncJobs(String token, Users user) {
 
         List<JobApplication> savedJobs = new ArrayList<>();
 
         String response = gmailService.fetchEmails(token);
-
         ObjectMapper mapper = new ObjectMapper();
 
         try {
@@ -41,25 +35,26 @@ public class JobService {
 
                 String messageId = msg.get("id").asText();
 
-                // avoid duplicate
                 if (jobRepo.existsByEmailId(messageId)) continue;
 
                 String emailJson = gmailService.getEmailDetails(token, messageId);
-
                 Map<String, String> parsed = helper.parseEmail(emailJson);
 
                 String subject = parsed.get("subject");
                 String snippet = parsed.get("snippet");
 
-                // 🔥 JOB FILTER LOGIC
                 if (isJobEmail(subject, snippet)) {
 
-                    JobApplication job = new JobApplication();
-                    job.setEmailId(messageId);
-                    job.setCompany(extractCompany(subject));
-                    job.setRole(extractRole(subject));
-                    job.setSource(extractSource(parsed.get("from")));
-                    job.setUser(user);
+                    JobApplication job = JobApplication.builder()
+                            .emailId(messageId)
+                            .company(helper.extractCompany(subject))
+                            .role(helper.extractRole(subject))
+                            .source(helper.extractSource(parsed.get("from")))
+                            .status(helper.extractStatus(subject, snippet))
+                            .appliedDate(helper.extractDate())
+                            .score(generateScore())
+                            .user(user)
+                            .build();
 
                     jobRepo.save(job);
                     savedJobs.add(job);
@@ -81,20 +76,58 @@ public class JobService {
                 text.contains("thank you for applying");
     }
 
-    private String extractCompany(String subject) {
-        return subject; // improve later
+    // ✅ TEMP AI SCORE
+    private double generateScore() {
+        return 60 + new Random().nextInt(40);
     }
 
-    private String extractRole(String subject) {
-        return subject; // improve later
+    // =========================
+    // ✅ DASHBOARD APIs LOGIC
+    // =========================
+
+    public Map<String, Object> getStats(Users user) {
+
+        Map<String, Object> stats = new HashMap<>();
+
+        stats.put("total", jobRepo.countByUser(user));
+        stats.put("interviews", jobRepo.countByUserAndStatus(user, "INTERVIEW"));
+        stats.put("noResponse", jobRepo.countByUserAndStatus(user, "NO_RESPONSE"));
+        stats.put("responses", jobRepo.countByUserAndStatusNot(user, "NO_RESPONSE"));
+
+        return stats;
     }
 
-    private String extractSource(String from) {
-        if (from == null) return "Unknown";
+    public List<Map<String, Object>> getSourceStats(Users user) {
 
-        if (from.toLowerCase().contains("linkedin")) return "LinkedIn";
-        if (from.toLowerCase().contains("indeed")) return "Indeed";
+        List<Object[]> data = jobRepo.getSourceStats(user);
+        List<Map<String, Object>> result = new ArrayList<>();
 
-        return "Direct";
+        for (Object[] row : data) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("source", row[0]);
+            map.put("count", row[1]);
+            result.add(map);
+        }
+
+        return result;
+    }
+
+    public List<Map<String, Object>> getTimelineStats(Users user) {
+
+        List<Object[]> data = jobRepo.getApplicationsPerMonth(user);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Object[] row : data) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("month", row[0]);
+            map.put("count", row[1]);
+            result.add(map);
+        }
+
+        return result;
+    }
+
+    public List<JobApplication> getRecentApplications(Users user) {
+        return jobRepo.findTop10ByUserOrderByAppliedDateDesc(user);
     }
 }

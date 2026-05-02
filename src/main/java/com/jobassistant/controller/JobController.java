@@ -4,47 +4,74 @@ import com.jobassistant.entity.JobApplication;
 import com.jobassistant.entity.Users;
 import com.jobassistant.repository.UserRepository;
 import com.jobassistant.service.JobService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/jobs")
+@RequiredArgsConstructor
 public class JobController {
 
-    @Autowired
-    private JobService jobService;
+    private final JobService jobService;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    private Users getUser(OAuth2User oAuth2User) {
+        String email = oAuth2User.getAttribute("email");
+        return userRepository.findByEmail(email).orElseThrow();
+    }
+
+    // =========================
+    // ✅ SYNC
+    // =========================
 
     @GetMapping("/sync")
     public List<JobApplication> sync(
             @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient client,
             @AuthenticationPrincipal OAuth2User oAuth2User
     ) {
-
         String token = client.getAccessToken().getTokenValue();
-        String email = oAuth2User.getAttribute("email");
-
-        Users user = userRepository.findByEmail(email).orElseThrow();
+        Users user = getUser(oAuth2User);
 
         return jobService.syncJobs(token, user);
     }
 
+    // =========================
+    // ✅ DASHBOARD APIs
+    // =========================
+
+    @GetMapping("/stats")
+    public Map<String, Object> stats(@AuthenticationPrincipal OAuth2User oAuth2User) {
+        return jobService.getStats(getUser(oAuth2User));
+    }
+
+    @GetMapping("/analytics/source")
+    public List<Map<String, Object>> sourceStats(@AuthenticationPrincipal OAuth2User oAuth2User) {
+        return jobService.getSourceStats(getUser(oAuth2User));
+    }
+
+    @GetMapping("/analytics/timeline")
+    public List<Map<String, Object>> timeline(@AuthenticationPrincipal OAuth2User oAuth2User) {
+        return jobService.getTimelineStats(getUser(oAuth2User));
+    }
+
+    @GetMapping("/recent")
+    public List<JobApplication> recent(@AuthenticationPrincipal OAuth2User oAuth2User) {
+        return jobService.getRecentApplications(getUser(oAuth2User));
+    }
+
+    // =========================
+    // ✅ ALL JOBS
+    // =========================
+
     @GetMapping
     public List<JobApplication> getAll(@AuthenticationPrincipal OAuth2User oAuth2User) {
-        String email = oAuth2User.getAttribute("email");
-
-        Users user = userRepository.findByEmail(email).orElseThrow();
-
-        return user.getJobApplications();
+        return getUser(oAuth2User).getJobApplications();
     }
 }

@@ -1,9 +1,7 @@
 package com.jobassistant.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDate;
 
@@ -11,6 +9,7 @@ import java.time.LocalDate;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class JobApplication {
 
     @Id
@@ -31,6 +30,10 @@ public class JobApplication {
 
     private String feedback;
 
-    @ManyToOne
+    // ✅ NEW FIELD (CRITICAL)
+    private String status; // APPLIED, INTERVIEW, NO_RESPONSE
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private Users user;
 }
