@@ -1,13 +1,15 @@
 package com.jobassistant.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+
+import java.util.List;
+
 @Entity
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Data
+@Builder
 public class Users {
 
     @Id
@@ -17,4 +19,8 @@ public class Users {
     private String email;
 
     private String googleId;
+
+    // ✅ Needed for dashboard
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<JobApplication> jobApplications;
 }
