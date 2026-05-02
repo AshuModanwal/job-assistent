@@ -13,27 +13,25 @@ public class GmailService {
 
     private static final String BASE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 
-    // ✅ Fetch list of emails
-    public String fetchEmails(String accessToken) {
+    public String fetchEmails(String accessToken, String query, int maxResults) {
+
+        String url = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+                + "?q=" + query
+                + "&maxResults=" + maxResults;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
 
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
-        try {
-            ResponseEntity<String> response = restTemplate.exchange(
-                    BASE_URL,
-                    HttpMethod.GET,
-                    entity,
-                    String.class
-            );
+        ResponseEntity<String> response = restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                String.class
+        );
 
-            return response.getBody();
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to fetch emails", e);
-        }
+        return response.getBody();
     }
 
     // ✅ Fetch single email details

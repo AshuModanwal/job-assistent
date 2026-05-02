@@ -19,23 +19,40 @@ public class JobService {
     private final HelperMethods helper;
     private final JobApplicationRepository jobRepo;
 
-    // ✅ SYNC JOBS FROM GMAIL
     public List<JobApplication> syncJobs(String token, Users user) {
 
         List<JobApplication> savedJobs = new ArrayList<>();
 
-        String response = gmailService.fetchEmails(token);
+        // ✅ Gmail filtering + limit
+        String response = gmailService.fetchEmails(
+                token,
+                "category:primary application OR interview OR job OR hiring OR offer letter",
+                20
+        );
+
         ObjectMapper mapper = new ObjectMapper();
 
         try {
             JsonNode root = mapper.readTree(response);
             JsonNode messages = root.path("messages");
 
+            if (messages.isMissingNode() || messages.isEmpty()) {
+                System.out.println("No messages found.");
+                return savedJobs;
+            }
+
+            System.out.println("Total messages fetched: " + messages.size());
+
             for (JsonNode msg : messages) {
 
                 String messageId = msg.get("id").asText();
 
-                if (jobRepo.existsByEmailId(messageId)) continue;
+                System.out.println("Processing message: " + messageId);
+
+                if (jobRepo.existsByEmailId(messageId)) {
+                    System.out.println("Already exists → skipped");
+                    continue;
+                }
 
                 String emailJson = gmailService.getEmailDetails(token, messageId);
                 Map<String, String> parsed = helper.parseEmail(emailJson);
@@ -43,37 +60,105 @@ public class JobService {
                 String subject = parsed.get("subject");
                 String snippet = parsed.get("snippet");
 
-                if (isJobEmail(subject, snippet)) {
+                System.out.println("Subject: " + subject);
+                System.out.println("Snippet: " + snippet);
 
-                    JobApplication job = JobApplication.builder()
-                            .emailId(messageId)
-                            .company(helper.extractCompany(subject))
-                            .role(helper.extractRole(subject))
-                            .source(helper.extractSource(parsed.get("from")))
-                            .status(helper.extractStatus(subject, snippet))
-                            .appliedDate(helper.extractDate())
-                            .score(generateScore())
-                            .user(user)
-                            .build();
+                String from = parsed.get("from");
 
-                    jobRepo.save(job);
-                    savedJobs.add(job);
+                if (from != null && (
+                        from.toLowerCase().contains("naukri") ||
+                                from.toLowerCase().contains("linkedin") ||
+                                from.toLowerCase().contains("indeed")
+                )) {
+                    System.out.println("Ignored job platform spam");
+                    continue;
                 }
+
+                String category = classifyEmail(subject, snippet);
+
+                if (category.equals("IGNORE")) {
+                    System.out.println("Ignored (not real application)");
+                    continue;
+                }
+
+                JobApplication job = JobApplication.builder()
+                        .emailId(messageId)
+                        .company(helper.extractCompany(subject))
+                        .role(helper.extractRole(subject))
+                        .source(helper.extractSource(parsed.get("from")))
+                        .status(category) // ✅ IMPORTANT CHANGE
+                        .appliedDate(helper.extractDate())
+                        .score(generateScore())
+                        .user(user)
+                        .build();
+
+                jobRepo.save(job);
+                savedJobs.add(job);
+
+                System.out.println("Saved REAL job: " + category);
             }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
+        System.out.println("Total jobs saved: " + savedJobs.size());
+
         return savedJobs;
     }
 
     private boolean isJobEmail(String subject, String snippet) {
-        String text = (subject + " " + snippet).toLowerCase();
+
+        if (subject == null && snippet == null) return false;
+
+        String text = ((subject != null ? subject : "") + " " +
+                (snippet != null ? snippet : "")).toLowerCase();
 
         return text.contains("application") ||
+                text.contains("applied") ||
                 text.contains("interview") ||
-                text.contains("thank you for applying");
+                text.contains("job") ||
+                text.contains("hiring") ||
+                text.contains("opportunity") ||
+                text.contains("career") ||
+                text.contains("position");
+    }
+
+    private String classifyEmail(String subject, String snippet) {
+
+        if (subject == null && snippet == null) return "IGNORE";
+
+        String text = ((subject != null ? subject : "") + " " +
+                (snippet != null ? snippet : "")).toLowerCase();
+
+        // ✅ OFFER (HIGH PRIORITY)
+        if (text.contains("offer")) {
+            return "OFFER";
+        }
+
+        // ✅ INTERVIEW
+        if (text.contains("interview") ||
+                text.contains("shortlisted") ||
+                text.contains("assessment")) {
+            return "INTERVIEW";
+        }
+
+        // ✅ APPLICATION CONFIRMATION (LESS STRICT)
+        if (text.contains("applied") ||
+                text.contains("application") ||
+                text.contains("thank you")) {
+            return "APPLIED";
+        }
+
+        // ❌ CLEAR NOISE
+        if (text.contains("apply now") ||
+                text.contains("jobs for you") ||
+                text.contains("recommended") ||
+                text.contains("weekly recap")) {
+            return "IGNORE";
+        }
+
+        return "IGNORE";
     }
 
     // ✅ TEMP AI SCORE
