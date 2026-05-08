@@ -1,218 +1,139 @@
 package com.jobassistant.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jobassistant.dto.response.application.JobApplicationResponse;
+import com.jobassistant.dto.response.application.SyncResponse;
+import com.jobassistant.enums.ApplicationStatus;
 import com.jobassistant.entity.JobApplication;
 import com.jobassistant.entity.Users;
 import com.jobassistant.repository.JobApplicationRepository;
-import com.jobassistant.util.HelperMethods;
+import com.jobassistant.util.EmailClassifier;
+import com.jobassistant.util.EmailParser;
+import com.jobassistant.util.ScoreCalculator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class JobService {
 
     private final GmailService gmailService;
-    private final HelperMethods helper;
+    private final EmailParser emailParser;
+    private final EmailClassifier emailClassifier;
+    private final ScoreCalculator scoreCalculator;
     private final JobApplicationRepository jobRepo;
 
-    public List<JobApplication> syncJobs(String token, Users user) {
+    private static final String GMAIL_QUERY =
+            "category:primary (subject:(application OR interview OR offer OR shortlisted OR selected OR rejected OR thank you for applying OR assessment OR coding challenge))";
 
-        List<JobApplication> savedJobs = new ArrayList<>();
+    @Transactional
+    public SyncResponse sync(String accessToken, Users user) {
+        List<String> messageIds = gmailService.listMessageIds(accessToken, GMAIL_QUERY, 50);
 
-        // ✅ Gmail filtering + limit
-        String response = gmailService.fetchEmails(
-                token,
-                "category:primary application OR interview OR job OR hiring OR offer letter",
-                20
-        );
+        int totalFetched      = messageIds.size();
+        int newlySaved        = 0;
+        int skippedDuplicates = 0;
+        int skippedNoise      = 0;
+        List<JobApplicationResponse> saved = new ArrayList<>();
 
-        ObjectMapper mapper = new ObjectMapper();
+        log.info("Sync started for user={} | fetched {} message IDs", user.getEmail(), totalFetched);
 
-        try {
-            JsonNode root = mapper.readTree(response);
-            JsonNode messages = root.path("messages");
-
-            if (messages.isMissingNode() || messages.isEmpty()) {
-                System.out.println("No messages found.");
-                return savedJobs;
+        for (String messageId : messageIds) {
+            if (jobRepo.existsByEmailId(messageId)) {
+                skippedDuplicates++;
+                continue;
             }
 
-            System.out.println("Total messages fetched: " + messages.size());
+            try {
+                String raw = gmailService.getMessageDetail(accessToken, messageId);
+                Map<String, String> parsed = emailParser.parse(raw);
 
-            for (JsonNode msg : messages) {
+                String subject    = parsed.get("subject");
+                String snippet   = parsed.get("snippet");
+                String from      = parsed.get("from");
+                String dateHeader = parsed.get("date");
 
-                String messageId = msg.get("id").asText();
-
-                System.out.println("Processing message: " + messageId);
-
-                if (jobRepo.existsByEmailId(messageId)) {
-                    System.out.println("Already exists → skipped");
+                // Skip platform spam senders
+                if (emailClassifier.isSenderNoise(from)) {
+                    log.debug("Skipped noise sender: {}", from);
+                    skippedNoise++;
                     continue;
                 }
 
-                String emailJson = gmailService.getEmailDetails(token, messageId);
-                Map<String, String> parsed = helper.parseEmail(emailJson);
-
-                String subject = parsed.get("subject");
-                String snippet = parsed.get("snippet");
-
-                System.out.println("Subject: " + subject);
-                System.out.println("Snippet: " + snippet);
-
-                String from = parsed.get("from");
-
-                if (from != null && (
-                        from.toLowerCase().contains("naukri") ||
-                                from.toLowerCase().contains("linkedin") ||
-                                from.toLowerCase().contains("indeed")
-                )) {
-                    System.out.println("Ignored job platform spam");
+                ApplicationStatus status = emailClassifier.classify(subject, snippet);
+                if (status == null) {
+                    log.debug("Skipped unrecognised email: {}", subject);
+                    skippedNoise++;
                     continue;
                 }
 
-                String category = classifyEmail(subject, snippet);
-
-                if (category.equals("IGNORE")) {
-                    System.out.println("Ignored (not real application)");
-                    continue;
-                }
+                double score = scoreCalculator.calculate(status, subject, snippet);
 
                 JobApplication job = JobApplication.builder()
                         .emailId(messageId)
-                        .company(helper.extractCompany(subject))
-                        .role(helper.extractRole(subject))
-                        .source(helper.extractSource(parsed.get("from")))
-                        .status(category) // ✅ IMPORTANT CHANGE
-                        .appliedDate(helper.extractDate())
-                        .score(generateScore())
+                        .company(emailParser.extractCompany(subject, from))
+                        .role(emailParser.extractRole(subject))
+                        .source(emailParser.extractSource(from))
+                        .status(status)
+                        .score(score)
+                        .appliedDate(emailParser.extractDate(dateHeader))
+                        .rawSubject(subject)
+                        .rawSnippet(snippet)
                         .user(user)
                         .build();
 
                 jobRepo.save(job);
-                savedJobs.add(job);
+                saved.add(toResponse(job));
+                newlySaved++;
 
-                System.out.println("Saved REAL job: " + category);
+                log.info("Saved: {} | {} | {}", status, job.getCompany(), job.getRole());
+
+            } catch (Exception e) {
+                log.error("Error processing message {}: {}", messageId, e.getMessage());
             }
-
-        } catch (Exception e) {
-            e.printStackTrace();
         }
 
-        System.out.println("Total jobs saved: " + savedJobs.size());
+        log.info("Sync done | new={} | dup={} | noise={}", newlySaved, skippedDuplicates, skippedNoise);
 
-        return savedJobs;
+        return SyncResponse.builder()
+                .totalFetched(totalFetched)
+                .newlySaved(newlySaved)
+                .skippedDuplicates(skippedDuplicates)
+                .skippedNoise(skippedNoise)
+                .saved(saved)
+                .build();
     }
 
-    private boolean isJobEmail(String subject, String snippet) {
-
-        if (subject == null && snippet == null) return false;
-
-        String text = ((subject != null ? subject : "") + " " +
-                (snippet != null ? snippet : "")).toLowerCase();
-
-        return text.contains("application") ||
-                text.contains("applied") ||
-                text.contains("interview") ||
-                text.contains("job") ||
-                text.contains("hiring") ||
-                text.contains("opportunity") ||
-                text.contains("career") ||
-                text.contains("position");
+    public List<JobApplicationResponse> getAllForUser(Users user) {
+        return jobRepo.findByUserOrderByAppliedDateDesc(user)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
-    private String classifyEmail(String subject, String snippet) {
-
-        if (subject == null && snippet == null) return "IGNORE";
-
-        String text = ((subject != null ? subject : "") + " " +
-                (snippet != null ? snippet : "")).toLowerCase();
-
-        // ✅ OFFER (HIGH PRIORITY)
-        if (text.contains("offer")) {
-            return "OFFER";
-        }
-
-        // ✅ INTERVIEW
-        if (text.contains("interview") ||
-                text.contains("shortlisted") ||
-                text.contains("assessment")) {
-            return "INTERVIEW";
-        }
-
-        // ✅ APPLICATION CONFIRMATION (LESS STRICT)
-        if (text.contains("applied") ||
-                text.contains("application") ||
-                text.contains("thank you")) {
-            return "APPLIED";
-        }
-
-        // ❌ CLEAR NOISE
-        if (text.contains("apply now") ||
-                text.contains("jobs for you") ||
-                text.contains("recommended") ||
-                text.contains("weekly recap")) {
-            return "IGNORE";
-        }
-
-        return "IGNORE";
+    public List<JobApplicationResponse> getRecentForUser(Users user) {
+        return jobRepo.findTop10ByUserOrderByAppliedDateDesc(user)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
-    // ✅ TEMP AI SCORE
-    private double generateScore() {
-        return 60 + new Random().nextInt(40);
-    }
-
-    // =========================
-    // ✅ DASHBOARD APIs LOGIC
-    // =========================
-
-    public Map<String, Object> getStats(Users user) {
-
-        Map<String, Object> stats = new HashMap<>();
-
-        stats.put("total", jobRepo.countByUser(user));
-        stats.put("interviews", jobRepo.countByUserAndStatus(user, "INTERVIEW"));
-        stats.put("noResponse", jobRepo.countByUserAndStatus(user, "NO_RESPONSE"));
-        stats.put("responses", jobRepo.countByUserAndStatusNot(user, "NO_RESPONSE"));
-
-        return stats;
-    }
-
-    public List<Map<String, Object>> getSourceStats(Users user) {
-
-        List<Object[]> data = jobRepo.getSourceStats(user);
-        List<Map<String, Object>> result = new ArrayList<>();
-
-        for (Object[] row : data) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("source", row[0]);
-            map.put("count", row[1]);
-            result.add(map);
-        }
-
-        return result;
-    }
-
-    public List<Map<String, Object>> getTimelineStats(Users user) {
-
-        List<Object[]> data = jobRepo.getApplicationsPerMonth(user);
-        List<Map<String, Object>> result = new ArrayList<>();
-
-        for (Object[] row : data) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("month", row[0]);
-            map.put("count", row[1]);
-            result.add(map);
-        }
-
-        return result;
-    }
-
-    public List<JobApplication> getRecentApplications(Users user) {
-        return jobRepo.findTop10ByUserOrderByAppliedDateDesc(user);
+    public JobApplicationResponse toResponse(JobApplication j) {
+        return JobApplicationResponse.builder()
+                .id(j.getId())
+                .company(j.getCompany())
+                .role(j.getRole())
+                .source(j.getSource())
+                .appliedDate(j.getAppliedDate())
+                .status(j.getStatus())
+                .score(j.getScore())
+                .feedback(j.getFeedback())
+                .build();
     }
 }
